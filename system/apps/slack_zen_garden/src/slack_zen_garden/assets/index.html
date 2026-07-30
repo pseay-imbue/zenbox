@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Unread Garden</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --sand: #e8e0d0;
+    --sand-shadow: #d4c9b4;
+    --wood: #4a3b2a;
+    --ink: #2e2a24;
+    --green: #6b8e5a;
+    --yellow: #c9a94e;
+    --brown: #8b6f47;
+    --jade: #dce8e4;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: "Zen Maru Gothic", system-ui, sans-serif;
+    color: var(--ink);
+    background: linear-gradient(180deg, #eef4f1 0%, var(--jade) 55%, #cbdad3 100%);
+  }
+  #canvas-wrap { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  /* Title plaque */
+  #title {
+    position: fixed; top: 26px; left: 30px; z-index: 10;
+    pointer-events: none;
+  }
+  #title h1 {
+    font-family: "Shippori Mincho", serif;
+    font-weight: 700; font-size: 30px; letter-spacing: 0.5px;
+    color: var(--ink); line-height: 1.1;
+  }
+  #title .sub {
+    font-size: 13px; color: #6a6357; margin-top: 4px; font-weight: 500;
+  }
+
+  /* Legend */
+  #legend {
+    position: fixed; top: 26px; right: 30px; z-index: 10;
+    background: rgba(255,255,255,0.55);
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(74,59,42,0.15);
+    border-radius: 14px; padding: 12px 15px;
+    font-size: 12.5px; font-weight: 500;
+    box-shadow: 0 6px 20px rgba(74,59,42,0.10);
+  }
+  #legend .row { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+  #legend .dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 -2px 3px rgba(0,0,0,0.15); }
+  #legend .g { background: var(--green); }
+  #legend .y { background: var(--yellow); }
+  #legend .b { background: var(--brown); }
+  #legend .cap { color: #6a6357; font-size: 11px; }
+
+  /* Cursor tooltip, offset to the side so it sits beside the plant, not over it */
+  #tip {
+    position: fixed; z-index: 20; width: 290px; max-width: 70vw;
+    pointer-events: none; opacity: 0; transform: translateY(4px);
+    transition: opacity 0.14s ease, transform 0.14s ease;
+    background: #f3ead6;
+    border: 1px solid #cbb489;
+    border-radius: 12px;
+    box-shadow: 0 10px 28px rgba(74,59,42,0.28);
+    padding: 12px 15px 13px;
+  }
+  #tip.show { opacity: 1; transform: translateY(0); }
+  #tip .chan {
+    font-weight: 700; font-size: 14px; color: var(--wood);
+    display: flex; align-items: center; gap: 8px; margin-bottom: 2px;
+  }
+  #tip .chan .age { margin-left: auto; font-size: 11px; font-weight: 700; color: #fff; padding: 1px 8px; border-radius: 20px; white-space: nowrap; }
+  #tip .who { font-size: 12px; color: #8a7a5e; font-weight: 500; margin-bottom: 7px; }
+  #tip .msg { font-size: 13.5px; line-height: 1.45; color: var(--ink); white-space: pre-wrap; word-break: break-word;
+    display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; overflow: hidden; }
+  #tip .open { margin-top: 9px; font-size: 11px; color: #a08b63; font-weight: 700; letter-spacing: 0.3px; }
+
+  /* Empty / loading / peace states */
+  #overlay {
+    position: fixed; inset: 0; z-index: 15; display: none;
+    align-items: center; justify-content: center; flex-direction: column;
+    text-align: center; pointer-events: none;
+  }
+  #overlay.show { display: flex; }
+  #overlay .stone {
+    font-family: "Shippori Mincho", serif; font-size: 22px; color: var(--ink);
+  }
+  #overlay .stone small { display: block; font-family: "Zen Maru Gothic"; font-size: 13px; color: #6a6357; margin-top: 8px; font-weight: 500; }
+
+  #hint {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    z-index: 10; font-size: 11.5px; color: #6a6357; font-weight: 500;
+    background: rgba(255,255,255,0.45); padding: 5px 13px; border-radius: 20px;
+    backdrop-filter: blur(4px);
+  }
+  .sample-badge {
+    position: fixed; bottom: 16px; right: 20px; z-index: 10;
+    font-size: 10.5px; font-weight: 600; color: #a07c3c;
+    background: rgba(255,246,224,0.8); border: 1px solid #e2cf9c;
+    padding: 4px 10px; border-radius: 20px; display: none;
+  }
+  #updated {
+    position: fixed; bottom: 16px; left: 20px; z-index: 10;
+    font-size: 11.5px; font-weight: 500; color: #6a6357;
+    background: rgba(255,255,255,0.45); padding: 4px 11px; border-radius: 20px;
+    backdrop-filter: blur(4px);
+  }
+</style>
+</head>
+<body>
+  <div id="canvas-wrap"></div>
+
+  <div id="title">
+    <h1>Unread Garden</h1>
+    <div class="sub" id="subline">tending your Slack&hellip;</div>
+  </div>
+
+  <div id="legend">
+    <div class="row"><span class="dot g"></span> Fresh <span class="cap">&lt; 3h</span></div>
+    <div class="row"><span class="dot y"></span> Yellowing <span class="cap">3&ndash;24h</span></div>
+    <div class="row"><span class="dot b"></span> Wilting <span class="cap">&gt; 24h</span></div>
+  </div>
+
+  <div id="tip">
+    <div class="chan"><span id="tip-chan"></span><span class="age" id="tip-age"></span></div>
+    <div class="who" id="tip-who"></div>
+    <div class="msg" id="tip-msg"></div>
+    <div class="open">click to open in Slack &rarr;</div>
+  </div>
+
+  <div id="overlay">
+    <div class="stone" id="overlay-text"></div>
+  </div>
+
+  <div id="hint">drag to look around &middot; scroll to zoom &middot; hover a plant to read &middot; click to open</div>
+  <div class="sample-badge" id="sample-badge">showing sample messages</div>
+  <div id="updated">last updated: &mdash;</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const BUCKET = {
+  // stemH: stalk height. lean: how far the tip leans out. sag: droop of the whole stalk.
+  // leafPitch: leaf angle (negative = reaching up, positive = drooping down).
+  // One upright stem per plant with an evenly-spaced whorl of short leaves (a tidy rosette).
+  // tiers: how many rings of leaves up the stem. lean/sag: character of the bend.
+  green: {
+    leaf: 0x79b562, leaf2: 0x93cd76, stem: 0x5f7f4a, flower: 0xf6b8cf, badge: "#6b8e5a",
+    stemH: 1.25, lean: 0.1, sag: 0.0, tiers: 2, perTier: 5, leafLen: 0.52, leafPitch: -0.7,
+  },
+  yellowing: {
+    leaf: 0xd8b94a, leaf2: 0xe6cd6a, stem: 0x8a8547, flower: null, badge: "#c9a94e",
+    stemH: 1.05, lean: 0.18, sag: 0.25, tiers: 2, perTier: 4, leafLen: 0.5, leafPitch: 0.1,
+  },
+  dying: {
+    leaf: 0x936b3f, leaf2: 0xa07a4d, stem: 0x6b573a, flower: null, badge: "#8b6f47",
+    stemH: 0.95, lean: 0.28, sag: 0.5, tiers: 2, perTier: 3, leafLen: 0.48, leafPitch: 0.7,
+  },
+};
+
+const wrap = document.getElementById("canvas-wrap");
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xcfdcd6, 26, 95);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 7, 13);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+wrap.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 6;
+controls.maxDistance = 34;
+controls.maxPolarAngle = Math.PI * 0.49;
+controls.target.set(0, 1.2, 0);
+
+// ---- Lighting: soft, warm, meditative ----
+scene.add(new THREE.HemisphereLight(0xffffff, 0xcfc3a8, 0.85));
+const sun = new THREE.DirectionalLight(0xfff2d8, 1.15);
+sun.position.set(10, 18, 8);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 1; sun.shadow.camera.far = 60;
+sun.shadow.camera.left = -22; sun.shadow.camera.right = 22;
+sun.shadow.camera.top = 22; sun.shadow.camera.bottom = -22;
+sun.shadow.bias = -0.0004;
+scene.add(sun);
+
+// ---- Raked sand ground ----
+function rakedSandTexture() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 1024;
+  const g = c.getContext("2d");
+  g.fillStyle = "#e8e0d0";
+  g.fillRect(0, 0, 1024, 1024);
+  // subtle grain
+  for (let i = 0; i < 24000; i++) {
+    g.fillStyle = `rgba(${180 + Math.random()*40|0},${165 + Math.random()*40|0},${135 + Math.random()*35|0},0.10)`;
+    g.fillRect(Math.random()*1024, Math.random()*1024, 2, 2);
+  }
+  // horizontal rake lines
+  g.strokeStyle = "rgba(196,182,152,0.55)";
+  g.lineWidth = 2;
+  for (let y = 12; y < 1024; y += 26) {
+    g.beginPath();
+    for (let x = 0; x <= 1024; x += 8) {
+      const yy = y + Math.sin(x * 0.03) * 3;
+      x === 0 ? g.moveTo(x, yy) : g.lineTo(x, yy);
+    }
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+// Sand extends effectively forever; distance fog fades it into the sky at the horizon.
+const SAND_SIZE = 400;
+const sandTex = rakedSandTexture();
+sandTex.repeat.set(SAND_SIZE / 14, SAND_SIZE / 14);
+const sand = new THREE.Mesh(
+  new THREE.PlaneGeometry(SAND_SIZE, SAND_SIZE),
+  new THREE.MeshStandardMaterial({ map: sandTex, roughness: 1 })
+);
+sand.rotation.x = -Math.PI / 2;
+sand.receiveShadow = true;
+scene.add(sand);
+
+// ---- Rock border: a ring of low-poly stones delineating the garden bed ----
+// Natural stone greys with a couple of warmer/mossier tints mixed in.
+const rockMats = [0x9c968a, 0xaaa498, 0x857f74, 0xb4ad9f, 0x8f9079].map(
+  (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1 })
+);
+let borderGroup = null;
+function makeRock(size, mat, seed) {
+  // A smooth, flattened river pebble: a subdivided sphere gently lumped with low-frequency
+  // deformation (not sharp facets), then squashed so it rests on the sand.
+  const geo = new THREE.IcosahedronGeometry(size, 2);
+  const pos = geo.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const n = v.clone().normalize();
+    const bump = 1
+      + 0.13 * Math.sin(n.x * 2.7 + seed)
+      + 0.11 * Math.sin(n.y * 3.3 + seed * 1.7)
+      + 0.10 * Math.sin(n.z * 3.0 + seed * 0.9);
+    v.multiplyScalar(bump);
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  geo.scale(1, 0.58, 0.82);
+  geo.computeVertexNormals();
+  const rock = new THREE.Mesh(geo, mat);
+  rock.castShadow = rock.receiveShadow = true;
+  return rock;
+}
+function placeBorder(radius) {
+  if (borderGroup) scene.remove(borderGroup);
+  borderGroup = new THREE.Group();
+  const circumference = 2 * Math.PI * radius;
+  // Space stones closer than their own width so neighbours overlap into a continuous border.
+  const count = Math.max(24, Math.round(circumference / 0.62));
+  for (let i = 0; i < count; i++) {
+    const seed = i * 131 + 7;
+    const rnd = mulberry(seed);
+    const a = (i / count) * Math.PI * 2;
+    // alternate stones slightly in/out so the border has natural thickness, but keep them tight to the ring
+    const rr = radius + (i % 2 ? 0.16 : -0.16) + (rnd() - 0.5) * 0.14;
+    const size = 0.44 + rnd() * 0.28;
+    const rock = makeRock(size, rockMats[i % rockMats.length], seed);
+    // Rest each pebble flat on the sand, half-buried, with only a gentle random tilt and spin.
+    rock.position.set(Math.cos(a) * rr, size * 0.16, Math.sin(a) * rr);
+    rock.rotation.set((rnd() - 0.5) * 0.3, rnd() * 6, (rnd() - 0.5) * 0.3);
+    borderGroup.add(rock);
+  }
+  scene.add(borderGroup);
+}
+
+// ---- Plant builder ----
+function makeLeaf(color, len) {
+  // a flattened teardrop leaf
+  const geo = new THREE.SphereGeometry(0.5, 10, 8);
+  geo.scale(0.34, 0.09, 1.0 * len);
+  geo.translate(0, 0, 0.5 * len);
+  return new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.7, flatShading: true }));
+}
+
+function makeFlower(color) {
+  const bloom = new THREE.Group();
+  for (let p = 0; p < 5; p++) {
+    const petal = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.6, flatShading: true }));
+    petal.scale.set(1, 0.45, 1.5);
+    petal.position.set(Math.cos(p / 5 * 6.28) * 0.16, 0, Math.sin(p / 5 * 6.28) * 0.16);
+    bloom.add(petal);
+  }
+  const center = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6),
+    new THREE.MeshStandardMaterial({ color: 0xf6d96b }));
+  bloom.add(center);
+  return bloom;
+}
+
+// A whole plant crown: one stem rising from the soil with evenly-spaced tiers of leaves.
+// Even angular spacing means leaves never cross; the short leaf length keeps the silhouette
+// compact, so neighbouring plants never touch. Returns the crown and its foliage radius.
+function makeCrown(cfg, rnd) {
+  const crown = new THREE.Group();
+  const height = cfg.stemH * (0.9 + rnd() * 0.2);
+  const lean = cfg.lean * (0.7 + rnd() * 0.6);
+  const dir = rnd() * Math.PI * 2;              // which way the stem leans (for character)
+  const bx = Math.cos(dir), bz = Math.sin(dir);
+  const base = new THREE.Vector3(0, 0, 0);
+  const ctrl = new THREE.Vector3(bx * lean * 0.3, height * 0.6, bz * lean * 0.3);
+  const tipY = height * (1 - cfg.sag * 0.35);   // sag lowers the tip a little
+  const tip = new THREE.Vector3(bx * lean, tipY, bz * lean);
+  const curve = new THREE.QuadraticBezierCurve3(base, ctrl, tip);
+  const stemMat = new THREE.MeshStandardMaterial({ color: cfg.stem, roughness: 0.85 });
+  const stem = new THREE.Mesh(new THREE.TubeGeometry(curve, 14, 0.05, 6, false), stemMat);
+  stem.castShadow = true;
+  crown.add(stem);
+
+  let maxReach = 0;
+  const horiz = Math.abs(Math.cos(cfg.leafPitch)) * cfg.leafLen;
+  for (let tier = 0; tier < cfg.tiers; tier++) {
+    // Leaf tiers sit lower down the stem (leaving a short flowering tip), spaced apart
+    // so the layers read as distinct rings; upper tiers are pitched slightly more upright.
+    const t = 0.24 + tier * (0.32 / Math.max(1, cfg.tiers - 1));
+    const p = curve.getPointAt(Math.min(1, t));
+    const tierPitch = cfg.leafPitch + tier * 0.15;
+    const yaw0 = (tier * 0.5) + rnd() * 0.3;     // offset each tier so tiers interleave
+    for (let k = 0; k < cfg.perTier; k++) {
+      const yaw = yaw0 + (k / cfg.perTier) * Math.PI * 2;
+      const leaf = makeLeaf(tier % 2 ? cfg.leaf2 : cfg.leaf, cfg.leafLen);
+      leaf.position.copy(p);
+      leaf.rotation.order = "YXZ";
+      leaf.rotation.y = yaw;
+      leaf.rotation.x = tierPitch;
+      leaf.castShadow = true;
+      crown.add(leaf);
+    }
+    maxReach = Math.max(maxReach, Math.hypot(p.x, p.z) + horiz);
+  }
+  const tipP = curve.getPointAt(1);
+  if (cfg.flower) {
+    const bloom = makeFlower(cfg.flower);
+    bloom.position.copy(tipP);
+    crown.add(bloom);
+  } else {
+    const bud = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6),
+      new THREE.MeshStandardMaterial({ color: cfg.leaf2, roughness: 0.7 }));
+    bud.position.copy(tipP);
+    crown.add(bud);
+  }
+  crown.userData.reach = maxReach;
+  return crown;
+}
+
+function makePlant(bucket, seed) {
+  const cfg = BUCKET[bucket];
+  const group = new THREE.Group();
+  const rnd = mulberry(seed);
+
+  // Pot: smooth terracotta from a lathed profile (radius, height) bottom -> rim.
+  const potMat = new THREE.MeshStandardMaterial({ color: 0xc07a52, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
+  const profile = [
+    [0.00, 0.00], [0.30, 0.00], [0.34, 0.04], [0.40, 0.14],
+    [0.52, 0.70], [0.60, 0.86], [0.66, 0.92], [0.66, 1.02],
+    [0.58, 1.00], [0.54, 0.94], [0.50, 0.90], [0.00, 0.86],
+  ].map(([x, y]) => new THREE.Vector2(x, y));
+  const pot = new THREE.Mesh(new THREE.LatheGeometry(profile, 48), potMat);
+  pot.castShadow = pot.receiveShadow = true;
+  group.add(pot);
+  // Soil: a low dome recessed well inside the rim (top ~0.9, radius 0.48 < inner wall 0.5) so no coincident faces.
+  const soil = new THREE.Mesh(new THREE.SphereGeometry(0.48, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+    new THREE.MeshStandardMaterial({ color: 0x4b3826, roughness: 1 }));
+  soil.scale.y = 0.28; soil.position.y = 0.86; group.add(soil);
+
+  // Foliage: a small cluster of stalks rooted just above the soil dome (~y 0.98).
+  const foliage = new THREE.Group();
+  foliage.position.y = 1.0;
+  const crown = makeCrown(cfg, rnd);
+  foliage.add(crown);
+  group.add(foliage);
+  group.userData.foliage = foliage;
+  group.userData.reach = crown.userData.reach;
+
+  // A few fallen leaves resting flat on the sand, placed clear of the pot (rim radius ~0.66)
+  // and pointing outward so nothing intrudes into or through the pot.
+  if (bucket === "dying") {
+    for (let i = 0; i < 3; i++) {
+      const ang = rnd() * Math.PI * 2;
+      const rad = 0.95 + rnd() * 0.5;
+      const fl = makeLeaf(0x7a5f3c, 0.65);
+      fl.position.set(Math.cos(ang) * rad, 0.04, Math.sin(ang) * rad);
+      fl.rotation.y = ang + (rnd() - 0.5) * 0.8;  // lie flat (thin in Y), blade pointing outward
+      group.add(fl);
+    }
+  }
+  return group;
+}
+
+// Concentric raked ring around a plant (the karesansui signature)
+// Concentric raked rings around the whole garden bed (between the cluster and the rocks).
+function makeBedRings(innerR, outerR) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0xcab795, roughness: 1 });
+  for (let r = innerR; r <= outerR; r += 0.4) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.04, 6, 128), mat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.02;
+    ring.receiveShadow = true;
+    g.add(ring);
+  }
+  return g;
+}
+
+// small deterministic PRNG so a given message always grows the same plant
+function mulberry(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function hash(str) { let h = 2166136261; for (let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619);} return h>>>0; }
+
+// ---- Layout plants on a spiral so any count looks arranged, not gridded ----
+function layout(n) {
+  const pts = [];
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < n; i++) {
+    // Phyllotaxis packing so the plants read as one clustered garden bed. The spacing constant
+    // exceeds twice a plant's foliage reach (~0.8), so neighbouring crowns never intersect.
+    const r = Math.sqrt(i) * 2.0;
+    const a = i * golden;
+    pts.push([Math.cos(a) * r, Math.sin(a) * r]);
+  }
+  return pts;
+}
+
+const plantMeshes = [];
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let hovered = null;
+
+function clearPlants() {
+  for (const p of plantMeshes) scene.remove(p.group);
+  plantMeshes.length = 0;
+}
+
+let bedRings = null;
+function buildGarden(plants) {
+  clearPlants();
+  if (bedRings) { scene.remove(bedRings); bedRings = null; }
+  const pos = layout(plants.length);
+  let maxR = 0;
+  plants.forEach((pl, i) => {
+    const seed = hash(pl.id + pl.text);
+    const g = makePlant(pl.bucket, seed);
+    const [x, z] = pos[i];
+    g.position.set(x, 0, z);
+    g.rotation.y = mulberry(seed)() * Math.PI * 2;
+    scene.add(g);
+    g.userData.data = pl;
+    g.userData.baseY = 0;
+    g.userData.sway = mulberry(seed + 9)() * 6;
+    plantMeshes.push({ group: g, data: pl });
+    maxR = Math.max(maxR, Math.hypot(x, z));
+  });
+  const borderR = Math.max(4.5, maxR + 2.6);
+  placeBorder(borderR);
+  bedRings = makeBedRings(maxR + 1.0, borderR - 0.5);
+  scene.add(bedRings);
+  return borderR;
+}
+
+let framed = false;
+function frameCamera(borderR) {
+  // Position the camera so the whole bed (plus rock border) fits comfortably in view.
+  const dist = borderR / Math.tan((camera.fov * Math.PI / 180) / 2) / Math.min(1, camera.aspect) * 0.62;
+  camera.position.set(0, borderR * 0.85, dist);
+  controls.target.set(0, 1, 0);
+  controls.update();
+}
+
+// ---- Interaction ----
+const tip = document.getElementById("tip");
+function showTip(pl, cx, cy) {
+  document.getElementById("tip-chan").textContent = pl.channel;
+  const age = document.getElementById("tip-age");
+  age.textContent = pl.age_hours < 1 ? Math.round(pl.age_hours * 60) + "m" : Math.round(pl.age_hours) + "h";
+  age.style.background = BUCKET[pl.bucket].badge;
+  document.getElementById("tip-who").textContent = pl.sender;
+  document.getElementById("tip-msg").textContent = pl.text;
+  tip.classList.add("show");
+  positionTip(cx, cy);
+}
+function positionTip(cx, cy) {
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  const gap = 28;
+  // Sit the card to the right of the cursor and vertically centred on it, so it's beside
+  // the plant (which rises above the cursor) rather than over it. Flip left near the edge.
+  let x = cx + gap;
+  if (x + w > window.innerWidth - 10) x = cx - w - gap;
+  x = Math.max(10, x);
+  let y = cy - h / 2;
+  y = Math.max(10, Math.min(window.innerHeight - h - 10, y));
+  tip.style.left = x + "px";
+  tip.style.top = y + "px";
+}
+function hideTip() { tip.classList.remove("show"); }
+
+function pick(clientX, clientY) {
+  pointer.x = (clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -(clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  for (const p of plantMeshes) {
+    const hit = raycaster.intersectObject(p.group, true);
+    if (hit.length) return p;
+  }
+  return null;
+}
+
+renderer.domElement.addEventListener("pointermove", (e) => {
+  const p = pick(e.clientX, e.clientY);
+  if (p) {
+    hovered = p.group;
+    showTip(p.data, e.clientX, e.clientY);
+    renderer.domElement.style.cursor = "pointer";
+  } else {
+    hovered = null; hideTip();
+    renderer.domElement.style.cursor = "grab";
+  }
+});
+renderer.domElement.addEventListener("pointerleave", () => { hovered = null; hideTip(); });
+
+let downXY = null;
+renderer.domElement.addEventListener("pointerdown", (e) => { downXY = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener("pointerup", (e) => {
+  if (!downXY) return;
+  const moved = Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]);
+  downXY = null;
+  if (moved > 6) return; // was a drag, not a click
+  const p = pick(e.clientX, e.clientY);
+  if (p && p.data.permalink) window.open(p.data.permalink, "_blank", "noopener");
+});
+
+// ---- Animate ----
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  for (const p of plantMeshes) {
+    const g = p.group;
+    const target = g === hovered ? 0.55 : 0.0;
+    g.userData.baseY += (target - g.userData.baseY) * 0.15;
+    const fol = g.userData.foliage;
+    fol.position.y = 1.0 + g.userData.baseY;
+    fol.rotation.z = Math.sin(t * 0.8 + g.userData.sway) * 0.05;
+    fol.rotation.x = Math.cos(t * 0.6 + g.userData.sway) * 0.03;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ---- Data ----
+const overlay = document.getElementById("overlay");
+const overlayText = document.getElementById("overlay-text");
+function setOverlay(html) { if (html) { overlayText.innerHTML = html; overlay.classList.add("show"); } else overlay.classList.remove("show"); }
+
+function setUpdated(epochSeconds) {
+  const el = document.getElementById("updated");
+  if (!epochSeconds) { el.textContent = "last updated: —"; return; }
+  const t = new Date(epochSeconds * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  el.textContent = "last updated: " + t;
+}
+
+async function load() {
+  try {
+    const res = await fetch("api/plants");
+    if (!res.ok) throw new Error("api " + res.status);
+    const data = await res.json();
+    document.getElementById("sample-badge").style.display = data.is_sample ? "block" : "none";
+    setUpdated(data.generated_at);
+    const n = data.plants.length;
+    document.getElementById("subline").innerHTML = n
+      ? `${n} unread ${n === 1 ? "message" : "messages"} growing in your garden`
+      : "all caught up";
+    if (!n) {
+      buildGarden([]);
+      setOverlay('Your garden is at peace.<small>No unread messages in the last 72 hours.</small>');
+      return;
+    }
+    setOverlay(null);
+    const borderR = buildGarden(data.plants);
+    if (!framed) { frameCamera(borderR); framed = true; }
+  } catch (e) {
+    console.error("garden render failed:", e);
+    setOverlay('The garden could not be tended.<small>Could not reach Slack just now &mdash; try refreshing.</small>');
+  }
+}
+load();
+// Refresh the garden periodically so it reflects new and newly-read messages on its own.
+setInterval(load, 60000);
+</script>
+</body>
+</html>
