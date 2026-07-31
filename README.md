@@ -9,6 +9,13 @@ web page — the **Unread Garden** — that renders your unread Slack messages f
 the last three days as a 3D zen garden: raked sand with a scattering of potted
 plants, one plant per unread message.
 
+<p align="center">
+  <a href="https://boweiliu.github.io/open-in-minds/?git_url=https://github.com/pseay-imbue/zenbox"><img alt="Open in Minds" height="64" src="https://img.shields.io/badge/Open%20in%20Minds-D8D1C0?style=for-the-badge"></a>
+</p>
+
+Didn't work? Create a Minds workspace and paste this to your agent:
+`/use-inspiration https://github.com/pseay-imbue/zenbox`
+
 ## What it is
 
 Fresh messages are healthy and green; as a message goes unanswered it wilts —
